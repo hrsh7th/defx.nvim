@@ -53,7 +53,7 @@ def do_action(view: View, defx: Defx,
     elif ActionAttr.TREE in action.attr:
         # Update opened state
         view._opened_candidates = [
-            x[0] for x in enumerate(view._candidates) if x[1]['is_opened']]
+            x[1]['action__path'] for x in enumerate(view._candidates) if x[1]['is_opened']]
         view.redraw()
     elif ActionAttr.REDRAW in action.attr:
         # Redraw

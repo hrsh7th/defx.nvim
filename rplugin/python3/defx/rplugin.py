@@ -9,7 +9,7 @@ import typing
 from defx.clipboard import Clipboard
 from defx.view import View
 from defx.util import Nvim
-
+from pathlib import Path
 
 class Rplugin:
 
@@ -44,10 +44,12 @@ class Rplugin:
             candidate = view.get_cursor_candidate(cursor)
             pos = view.get_candidate_pos(
                 candidate['action__path'], candidate['_defx_index'])
+
+            path = Path(candidate['action__path'])
             return {
                 'word': candidate['word'],
                 'is_directory': candidate['is_directory'],
-                'is_opened_tree': pos in view._opened_candidates,
-                'action__path': str(candidate['action__path']),
+                'is_opened_tree': path in view._opened_candidates or path.parent in view._opened_candidates,
+                'action__path': str(path),
             }
         return {}

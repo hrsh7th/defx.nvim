@@ -163,7 +163,7 @@ defx#is_directory()					*defx#is_directory()*
 
 
 defx#is_opened_tree()					*defx#is_opened()*
-		Returns |v:true| if the current cursor candidate is opened
+		Returns |v:true| if the current cursor candidate is in opened
 		directory tree.
 
 ------------------------------------------------------------------------------

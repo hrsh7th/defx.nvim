@@ -13,6 +13,7 @@ from defx.context import Context
 from defx.defx import Defx
 from defx.view import View
 from defx.util import Nvim
+from pathlib import Path
 
 
 class Base:
@@ -73,29 +74,34 @@ def _call(view: View, defx: Defx, context: Context) -> None:
 
 
 def _close_tree(view: View, defx: Defx, context: Context) -> None:
-    for target in [x for x in context.targets if x['is_directory']]:
-        if not target['is_opened'] or target.get('is_root', False):
-            continue
+    cursor_candidate = view.get_cursor_candidate(view._vim.call('line', '.'))
+    if not cursor_candidate:
+        return
 
-        path = target['action__path']
+    if cursor_candidate['is_directory'] and cursor_candidate['is_opened']:
+        pos = view.get_candidate_pos(cursor_candidate['action__path'], defx._index)
+    else:
+        pos = view.get_candidate_pos(Path(cursor_candidate['action__path']).parent, defx._index)
 
-        # Search insert position
-        pos = view.get_candidate_pos(path, defx._index)
-        if pos < 0:
-            continue
+    # Search insert position
+    if pos < 0:
+        return
 
-        view._candidates[pos]['is_opened'] = False
+    target = view._candidates[pos]
+    target['is_opened'] = False
 
-        start = pos + 1
-        base_level = target['level']
-        end = start
-        for candidate in view._candidates[start:]:
-            if candidate['level'] <= base_level:
-                break
-            end += 1
+    start = pos + 1
+    base_level = target['level']
+    end = start
+    for candidate in view._candidates[start:]:
+        if candidate['level'] <= base_level:
+            break
+        end += 1
 
-        view._candidates = (view._candidates[: start] +
-                            view._candidates[end:])
+    view._candidates = (view._candidates[: start] +
+                        view._candidates[end:])
+
+    view.search_file(Path(target['action__path']), defx._index)
 
 
 def _multi(view: View, defx: Defx, context: Context) -> None:
@@ -186,21 +192,25 @@ def _toggle_ignored_files(view: View, defx: Defx, context: Context) -> None:
 
 
 def _toggle_select(view: View, defx: Defx, context: Context) -> None:
-    index = context.cursor - 1
-    if index in view._selected_candidates:
-        view._selected_candidates.remove(index)
+    cursor_candidate = view.get_cursor_candidate(view._vim.call('line', '.'))
+    if not cursor_candidate:
+        return
+    path = cursor_candidate['action__path']
+
+    if path in view._selected_candidates:
+        view._selected_candidates.remove(path)
     else:
-        view._selected_candidates.append(index)
+        view._selected_candidates.append(path)
 
 
 def _toggle_select_all(view: View, defx: Defx, context: Context) -> None:
     for [index, candidate] in enumerate(view._candidates):
-        if (not candidate.get('is_root', False) and
-                candidate['_defx_index'] == defx._index):
-            if index in view._selected_candidates:
-                view._selected_candidates.remove(index)
+        if not candidate.get('is_root', False):
+            path = candidate['action__path']
+            if path in view._selected_candidates:
+                view._selected_candidates.remove(path)
             else:
-                view._selected_candidates.append(index)
+                view._selected_candidates.append(path)
 
 
 def _toggle_sort(view: View, defx: Defx, context: Context) -> None:

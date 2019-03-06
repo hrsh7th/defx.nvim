@@ -20,8 +20,8 @@ class View(object):
     def __init__(self, vim: Nvim, index: int) -> None:
         self._vim: Nvim = vim
         self._candidates: typing.List[typing.Dict[str, typing.Any]] = []
-        self._selected_candidates: typing.List[int] = []
-        self._opened_candidates: typing.List[int] = []
+        self._selected_candidates: typing.List[str] = []
+        self._opened_candidates: typing.List[str] = []
         self._clipboard = Clipboard()
         self._bufnr = -1
         self._winid = -1
@@ -258,18 +258,27 @@ class View(object):
                 self._vim.command('enew')
 
     def init_candidates(self) -> None:
-        self._selected_candidates = []
-        self._opened_candidates = []
         self._candidates = []
         for defx in self._defxs:
             root = defx.get_root_candidate()
+            root['_defx_index'] = defx._index
+            root['level'] = 0
             defx._mtime = root['action__path'].stat().st_mtime
 
-            candidates = [root]
-            candidates += defx.gather_candidates()
-            for candidate in candidates:
-                candidate['_defx_index'] = defx._index
-            self._candidates += candidates
+            self._candidates = [root]
+            self._init_candidates(defx, root['action__path'], 0)
+
+        self._selected_candidates = [candidate['action__path'] for candidate in self._candidates if candidate['action__path'] in self._selected_candidates]
+        self._opened_candidates = [candidate['action__path'] for candidate in self._candidates if candidate['action__path'] in self._opened_candidates]
+
+    def _init_candidates(self, defx, path, level) -> None:
+        candidates = defx.gather_candidates(path)
+        for candidate in candidates:
+            candidate['_defx_index'] = defx._index
+            candidate['level'] = level
+            self._candidates.append(candidate)
+            if candidate['action__path'] in self._opened_candidates:
+                self._init_candidates(defx, candidate['action__path'], level + 1)
 
     def redraw(self, is_force: bool = False) -> None:
         """
@@ -293,10 +302,14 @@ class View(object):
         for candidate in self._candidates:
             candidate['is_selected'] = False
             candidate['is_opened'] = False
-        for index in self._selected_candidates:
-            self._candidates[index]['is_selected'] = True
-        for index in self._opened_candidates:
-            self._candidates[index]['is_opened'] = True
+        for path in self._selected_candidates:
+            for candidate in self._candidates:
+                if candidate['action__path'] is path:
+                    candidate['is_selected'] = True
+        for path in self._opened_candidates:
+            for candidate in self._candidates:
+                if candidate['action__path'] is path:
+                    candidate['is_opened'] = True
 
         for column in self._columns:
             column.on_redraw(self._context)
@@ -344,8 +357,7 @@ class View(object):
         if not self._selected_candidates:
             candidates = [self.get_cursor_candidate(cursor)]
         else:
-            candidates = [self._candidates[x]
-                          for x in self._selected_candidates]
+            candidates = [candidate for candidate in self._candidates if candidate['action__path'] in self._selected_candidates]
         return [x for x in candidates
                 if x.get('_defx_index', -1) == index]
 

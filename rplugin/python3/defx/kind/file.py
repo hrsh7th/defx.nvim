@@ -41,13 +41,13 @@ class Kind(Base):
                 func=_execute_command, attr=ActionAttr.NO_TAGETS),
             'execute_system': ActionTable(func=_execute_system),
             'move': ActionTable(func=_move),
-            'new_directory': ActionTable(func=_new_directory),
-            'new_file': ActionTable(func=_new_file),
-            'new_multiple_files': ActionTable(func=_new_multiple_files),
+            'new_directory': ActionTable(func=_new_directory, attr=ActionAttr.NO_TAGETS),
+            'new_file': ActionTable(func=_new_file, attr=ActionAttr.NO_TAGETS),
+            'new_multiple_files': ActionTable(func=_new_multiple_files, attr=ActionAttr.NO_TAGETS),
             'open': ActionTable(func=_open),
             'open_directory': ActionTable(func=_open_directory),
             'paste': ActionTable(func=_paste, attr=ActionAttr.NO_TAGETS),
-            'remove': ActionTable(func=_remove, attr=ActionAttr.REDRAW),
+            'remove': ActionTable(func=_remove, attr=ActionAttr.NO_TAGETS),
             'remove_trash': ActionTable(func=_remove_trash),
             'rename': ActionTable(func=_rename),
         })
@@ -200,7 +200,10 @@ def _new_directory(view: View, defx: Defx, context: Context) -> None:
     """
     Create a new directory.
     """
-    filename = cwd_input(view._vim, defx._cwd,
+    cursor_candidate = view.get_cursor_candidate(view._vim.call('line', '.'))
+    if not cursor_candidate or not 'action__path' in cursor_candidate:
+        return
+    filename = cwd_input(view._vim, Path(cursor_candidate['action__path']).parent,
                          'Please input a new directory: ', '', 'dir')
     if not filename:
         return
@@ -217,7 +220,10 @@ def _new_file(view: View, defx: Defx, context: Context) -> None:
     """
     Create a new file and it's parent directories.
     """
-    filename = cwd_input(view._vim, defx._cwd,
+    cursor_candidate = view.get_cursor_candidate(view._vim.call('line', '.'))
+    if not cursor_candidate or not 'action__path' in cursor_candidate:
+        return
+    filename = cwd_input(view._vim, Path(cursor_candidate['action__path']).parent,
                          'Please input a new filename: ', '', 'file')
     if not filename:
         return
@@ -238,9 +244,13 @@ def _new_multiple_files(view: View, defx: Defx, context: Context) -> None:
     """
     Create multiple files.
     """
+    cursor_candidate = view.get_cursor_candidate(view._vim.call('line', '.'))
+    if not cursor_candidate or not 'action__path' in cursor_candidate:
+        return
+    cwd = Path(cursor_candidate['action__path']).parent
 
     save_cwd = view._vim.call('getcwd')
-    view._vim.command(f'silent lcd {defx._cwd}')
+    view._vim.command(f'silent lcd {cwd}')
 
     str_filenames: str = view._vim.call(
         'input', 'Please input new filenames: ', '', 'file')
@@ -252,7 +262,7 @@ def _new_multiple_files(view: View, defx: Defx, context: Context) -> None:
     for name in str_filenames.split():
         is_dir = name[-1] == '/'
 
-        filename = Path(defx._cwd).joinpath(name).resolve()
+        filename = Path(cwd).joinpath(name).resolve()
         if filename.exists():
             error(view._vim, f'{filename} already exists')
             continue
@@ -298,11 +308,16 @@ def _open_directory(view: View, defx: Defx, context: Context) -> None:
 
 
 def _paste(view: View, defx: Defx, context: Context) -> None:
+    cursor_candidate = view.get_cursor_candidate(view._vim.call('line', '.'))
+    if not cursor_candidate or not 'action__path' in cursor_candidate:
+        return
+    cwd = Path(cursor_candidate['action__path']).parent
+
     action = view._clipboard.action
     dest = None
     for index, candidate in enumerate(view._clipboard.candidates):
         path = candidate['action__path']
-        dest = Path(defx._cwd).joinpath(path.name)
+        dest = Path(cwd).joinpath(path.name)
         if dest.exists():
             overwrite = check_overwrite(view, dest, path)
             if overwrite == Path(''):
@@ -320,7 +335,7 @@ def _paste(view: View, defx: Defx, context: Context) -> None:
             else:
                 shutil.copy2(str(path), dest)
         elif action == ClipboardAction.MOVE:
-            shutil.move(str(path), defx._cwd)
+            shutil.move(str(path), cwd)
         view._vim.command('redraw')
     view._vim.command('echo')
 
@@ -350,6 +365,7 @@ def _remove(view: View, defx: Defx, context: Context) -> None:
             shutil.rmtree(str(path))
         else:
             path.unlink()
+    view.redraw(True)
 
 
 def _remove_trash(view: View, defx: Defx, context: Context) -> None:
